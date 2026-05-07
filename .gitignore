@@ -1,0 +1,9 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Claude Code local
+.claude/
+
+# Misc
+nul
