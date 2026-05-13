@@ -38,7 +38,7 @@
 
 | Skill | 读取方式 | 写入方式 | 备注 |
 |-------|---------|---------|------|
-| flomo | CDP 浏览器（优先用已登录 tab） | Webhook API | 读取需 Chrome 登录态 |
+| flomo | MCP API（flomoapp.com/mcp） | Webhook API | 读取需 MCP Token，配置在 `02 笔记融合/config.json` |
 | Get笔记 | REST API | REST API | 需 API Key + Client ID |
 | 印象笔记 | evernote SDK + 图片 OCR | evernote SDK | 中国版需 `china=True`，Python 3.11，OCR 用 `winocr`（Windows 内置） |
 
