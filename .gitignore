@@ -5,5 +5,12 @@ Desktop.ini
 # Claude Code local
 .claude/
 
+# 晨间日记临时文件
+01 晨间日记自动创建/task_update.xml
+01 晨间日记自动创建/diary.log
+
 # Misc
 nul
+
+# 凭证配置
+02 笔记融合/config.json
