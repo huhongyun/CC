@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+bot.log
+test_bot.py
+*.png

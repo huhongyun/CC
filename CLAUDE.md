@@ -47,6 +47,7 @@
 | Skill | 位置 | 说明 |
 |-------|------|------|
 | birthday-poem | `~/.claude/skills/birthday-poem/` | 生日祝福藏头诗生成，支持保存到 Get笔记「生日祝福」知识库 |
+| lark-* (24个) | `~/.agents/skills/lark-*/` | 飞书官方 Skill，覆盖日历、消息、文档、表格、任务、邮箱等飞书业务域 |
 
 ## API 调用编码规范
 
@@ -54,3 +55,15 @@ Windows bash 环境下调用含中文的 REST API 时：
 - **禁止用 curl**：curl 在 Windows bash 下发送中文 JSON 会乱码
 - **必须用 Python**：`urllib.request` + `json.dumps(data, ensure_ascii=False).encode('utf-8')`
 - 参考：`06 生日祝福` 项目中保存到 Get笔记的实际实现
+
+## 飞书 lark-cli 配置
+
+- **版本**：1.0.31，全局安装（`npm install -g @larksuite/cli`）
+- **应用 ID**：`cli_aa8c0508b43a1cce`（品牌：feishu）
+- **授权用户**：胡宏运（`ou_d7da6606af109ae4328e759cf9f72be3`）
+- **Token 有效期**：access token 约 2 小时，refresh token 7 天，过期后需重新 `lark-cli auth login --recommend`
+- **已授权业务域**：日历、消息、文档、表格、云盘、任务、知识库、多维表格、幻灯片、白板、会议、邮箱、审批、通讯录、妙记
+- **注意事项**：
+  - `--recommend` 参数会请求全部常用权限，浏览器授权页面需批准所有权限开关
+  - 消息发送需额外 scope `im:message.send_as_user`，`--recommend` 未包含，需单独授权
+  - 命令格式：`lark-cli <domain> +<action> [flags]`，如 `lark-cli calendar +agenda --start 2026-05-15`
