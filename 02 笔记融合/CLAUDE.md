@@ -32,8 +32,9 @@ pip install evernote3 python-oauth2 winocr Pillow
 ├── config.json               # 平台凭证配置（不入 git）
 ├── fetch_notes.py            # 统一数据拉取脚本（含图片 OCR）
 ├── analyze.py                # 行为分析 + 知识链接脚本
-├── read_week_diary.py        # 读取印象笔记上周晨间日记
-├── save_weekly_to_evernote.py # 将周记保存到印象笔记
+├── read_week_diary.py        # 读取印象笔记上周晨间日记（旧脚本，保留兼容）
+├── save_weekly_to_evernote.py # 将周记保存到印象笔记（旧脚本，保留兼容）
+├── weekly_journal.py         # 周记工具：读取日记 + 保存周记（推荐使用）
 ├── 笔记融合需求.txt            # 原始需求文档
 └── output/                   # 分析报告输出目录（不入 git）
     ├── notes_YYYYMMDD.json     # 拉取的原始数据
@@ -71,9 +72,17 @@ python analyze.py --input output/notes_YYYYMMDD.json
 ### 周记生成
 
 用户说"帮我写周记"或"汇总上周日记"时：
-1. 运行 `python3.11 read_week_diary.py` 读取上周晨间日记
-2. Claude 根据日记内容汇总周记
-3. 运行 `python3.11 save_weekly_to_evernote.py` 保存到印象笔记
+1. 运行 `python3.11 weekly_journal.py read --start YYYY-MM-DD --end YYYY-MM-DD` 读取指定日期范围的晨间日记
+2. Claude 根据日记内容汇总周记，输出到 `output/journal_YYYYMMDD~MMDD.md`
+3. 运行 `python3.11 weekly_journal.py save --title "标题" --file output/journal.md` 保存到印象笔记
+
+```bash
+# 读取日记（默认输出到 output/weekly_YYYYMMDD.txt）
+python3.11 weekly_journal.py read --start 2026-04-01 --end 2026-04-07
+
+# 保存周记到印象笔记
+python3.11 weekly_journal.py save --title "20260401~0407-周记" --file output/journal_20260401~0407.md
+```
 
 ## 数据格式
 
