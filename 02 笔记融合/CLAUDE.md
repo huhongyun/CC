@@ -35,12 +35,14 @@ pip install evernote3 python-oauth2 winocr Pillow
 ├── read_week_diary.py        # 读取印象笔记上周晨间日记（旧脚本，保留兼容）
 ├── save_weekly_to_evernote.py # 将周记保存到印象笔记（旧脚本，保留兼容）
 ├── weekly_journal.py         # 周记工具：读取日记 + 保存周记（推荐使用）
+├── .mcp.json                 # MCP 服务器配置（含 flomo token，不入 git）
 ├── 笔记融合需求.txt            # 原始需求文档
-└── output/                   # 分析报告输出目录（不入 git）
+└── output/                   # 输出目录（不入 git）
     ├── notes_YYYYMMDD.json     # 拉取的原始数据
     ├── report_YYYYMMDD.md      # 分析报告
     ├── last_week_diaries.json  # 上周日记原始数据
-    └── weekly_YYYYMMDD.md      # 周记
+    ├── weekly_YYYYMMDD.txt     # 读取的原始日记（read 子命令输出）
+    └── journal_*.md            # 生成的周记/月记（save 子命令输入）
 ```
 
 ## 使用方式
