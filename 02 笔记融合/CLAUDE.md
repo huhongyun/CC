@@ -35,6 +35,7 @@ pip install evernote3 python-oauth2 winocr Pillow
 ├── read_week_diary.py        # 读取印象笔记上周晨间日记（旧脚本，保留兼容）
 ├── save_weekly_to_evernote.py # 将周记保存到印象笔记（旧脚本，保留兼容）
 ├── weekly_journal.py         # 周记工具：读取日记 + 保存周记（推荐使用）
+├── tag_existing_journals.py  # 批量为已有周记/月记/年记添加标签
 ├── .mcp.json                 # MCP 服务器配置（含 flomo token，不入 git）
 ├── 笔记融合需求.txt            # 原始需求文档
 └── output/                   # 输出目录（不入 git）
@@ -84,6 +85,23 @@ python3.11 weekly_journal.py read --start 2026-04-01 --end 2026-04-07
 
 # 保存周记到印象笔记
 python3.11 weekly_journal.py save --title "20260401~0407-周记" --file output/journal_20260401~0407.md
+```
+
+### 标签规则
+
+`save` 子命令会根据标题自动添加标签（已内置，无需手动指定）：
+
+| 标题包含 | 自动添加标签 | 示例 |
+|----------|------------|------|
+| `周记` | `周记` | `20260401~0407-周记` |
+| `月记` | `月记` | `202501~月记` |
+| `年记` | `年记` | `2025~年记` |
+
+如需为已有的笔记批量补标签：
+
+```bash
+python3.11 tag_existing_journals.py          # 执行
+python3.11 tag_existing_journals.py --dry-run # 预览
 ```
 
 ## 数据格式

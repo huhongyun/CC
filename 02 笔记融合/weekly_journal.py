@@ -231,7 +231,21 @@ def md_to_enml(md_text):
 
 # ─── 保存到印象笔记 ─────────────────────────────────────────
 
-def save_to_evernote(note_store, token, notebook_guid, title, md_content):
+def get_or_create_tag(note_store, token, tag_name):
+    """获取或创建标签，返回 tag GUID"""
+    tags = retry_on_rate_limit(note_store.listTags)
+    for tag in tags:
+        if tag.name == tag_name:
+            return tag.guid
+    # 不存在则创建
+    from evernote.edam.type.ttypes import Tag
+    tag = Tag()
+    tag.name = tag_name
+    created = retry_on_rate_limit(note_store.createTag, token, tag)
+    print(f"  创建标签: {tag_name} ({created.guid})")
+    return created.guid
+
+def save_to_evernote(note_store, token, notebook_guid, title, md_content, tags=None):
     from evernote.edam.type.ttypes import Note
 
     enml_content = md_to_enml(md_content)
@@ -240,10 +254,30 @@ def save_to_evernote(note_store, token, notebook_guid, title, md_content):
     note.content = enml_content
     note.notebookGuid = notebook_guid
 
+    # 自动检测标签（从标题推断）
+    if tags is None:
+        tags = []
+        if '周记' in title:
+            tags.append('周记')
+        elif '月记' in title:
+            tags.append('月记')
+        elif '年记' in title:
+            tags.append('年记')
+
+    # 设置标签
+    if tags:
+        tag_guids = []
+        for tag_name in tags:
+            tag_guid = get_or_create_tag(note_store, token, tag_name)
+            tag_guids.append(tag_guid)
+        note.tagGuids = tag_guids
+
     created_note = retry_on_rate_limit(note_store.createNote, token, note)
     print(f"已保存到印象笔记！")
     print(f"  标题: {created_note.title}")
     print(f"  GUID: {created_note.guid}")
+    if tags:
+        print(f"  标签: {', '.join(tags)}")
     return created_note
 
 # ─── CLI ────────────────────────────────────────────────────
