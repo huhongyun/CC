@@ -43,7 +43,9 @@ pip install evernote3 python-oauth2 winocr Pillow
     ├── report_YYYYMMDD.md      # 分析报告
     ├── last_week_diaries.json  # 上周日记原始数据
     ├── weekly_YYYYMMDD.txt     # 读取的原始日记（read 子命令输出）
-    └── journal_*.md            # 生成的周记/月记（save 子命令输入）
+    ├── journal_YYYYMMDD~MMDD.md # 生成的周记
+    ├── journal_YYYYMM.md       # 生成的月记
+    └── journal_YYYY.md         # 生成的年记
 ```
 
 ## 使用方式
@@ -104,6 +106,18 @@ python3.11 tag_existing_journals.py          # 执行
 python3.11 tag_existing_journals.py --dry-run # 预览
 ```
 
+### 周记/月记/年记 Skill
+
+项目内置三个 Claude Code Skill，封装了"读取日记→生成摘要→保存到印象笔记"的完整流程：
+
+| Skill | 触发方式 | 说明 |
+|-------|---------|------|
+| `/weekly-journal` | `/weekly-journal` 或 `/weekly-journal 2026-05-12~2026-05-18` | 读取指定周日记，生成周记。默认取上周 |
+| `/monthly-journal` | `/monthly-journal` 或 `/monthly-journal 2026-04` | 读取整月日记，生成月记。默认取上月 |
+| `/annual-journal` | `/annual-journal` 或 `/annual-journal 2025` | 综合 12 份月记，生成年记。默认取去年 |
+
+Skill 文件位于 `.claude/commands/` 目录，定义了完整的输出格式和写作要求。
+
 ## 数据格式
 
 ### 拉取数据（notes_YYYYMMDD.json）
@@ -141,7 +155,7 @@ python3.11 tag_existing_journals.py --dry-run # 预览
 
 - Get笔记：QPS 限制（错误码 10202），频繁请求会被限流
 - Flomo：每分钟 60 次
-- 印象笔记：无明确限制，但避免过于频繁；拉取图片资源会增加请求量
+- 印象笔记：批量操作（拉取/创建大量笔记）会触发 errorCode=19 限流，`weekly_journal.py` 内置 `retry_on_rate_limit()` 自动等待重试
 
 ## 图片 OCR
 
