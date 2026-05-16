@@ -11,9 +11,20 @@ if not hasattr(inspect, 'getargspec'):
 # SSL 证书验证修复（中国版印象笔记需要）
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# 使用 create_diary.py 中的 token
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '01 晨间日记自动创建'))
-from create_diary import DEFAULT_TOKEN
+# 加载凭证
+config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+with open(config_path, 'r', encoding='utf-8') as f:
+    config = json.load(f)
+
+TOKEN = config['yinxiang']['token']
+if not TOKEN:
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '01 晨间日记自动创建'))
+        from create_diary import DEFAULT_TOKEN
+        TOKEN = DEFAULT_TOKEN
+    except Exception:
+        print("错误: 未找到有效的印象笔记 token")
+        sys.exit(1)
 
 NOTEBOOK_NAME = '04-10 晨间日记'
 TITLE = '20260504~0510-周记'
@@ -27,7 +38,7 @@ with open(weekly_path, 'r', encoding='utf-8') as f:
 from evernote.api.client import EvernoteClient
 from evernote.edam.notestore.ttypes import NoteFilter
 
-client = EvernoteClient(token=DEFAULT_TOKEN, sandbox=False, china=True)
+client = EvernoteClient(token=TOKEN, sandbox=False, china=True)
 note_store = client.get_note_store()
 
 # 查找笔记本
@@ -124,7 +135,7 @@ note.content = enml_content
 note.notebookGuid = target_notebook.guid
 
 try:
-    created_note = note_store.createNote(DEFAULT_TOKEN, note)
+    created_note = note_store.createNote(TOKEN, note)
     print(f"周记已保存到印象笔记！")
     print(f"  标题: {created_note.title}")
     print(f"  GUID: {created_note.guid}")

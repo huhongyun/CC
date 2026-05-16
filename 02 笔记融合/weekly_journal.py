@@ -4,7 +4,7 @@
     python weekly_journal.py read  --start 2026-04-01 --end 2026-04-07 [--output path]
     python weekly_journal.py save  --title "20260330~0405-周记" --file output/journal.md
 """
-import os, sys, json, inspect, re, ssl, argparse, html
+import os, sys, json, inspect, re, ssl, argparse, html, time
 from datetime import datetime, timedelta
 
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -16,6 +16,22 @@ if not hasattr(inspect, 'getargspec'):
 
 # SSL 证书验证修复（中国版印象笔记需要）
 ssl._create_default_https_context = ssl._create_unverified_context
+
+# ─── 限流重试 ───────────────────────────────────────────────
+
+def retry_on_rate_limit(func, *args, max_retries=5, **kwargs):
+    """调用 Evernote API 时自动处理限流重试"""
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if hasattr(e, 'errorCode') and e.errorCode == 19:
+                wait = getattr(e, 'rateLimitDuration', 60)
+                print(f"  限流，等待 {wait} 秒后重试（第 {attempt+1}/{max_retries} 次）...")
+                time.sleep(wait)
+            else:
+                raise
+    raise Exception(f"重试 {max_retries} 次后仍被限流")
 
 # ─── 配置加载 ───────────────────────────────────────────────
 
@@ -45,7 +61,7 @@ def get_evernote_connection(token):
     return note_store
 
 def find_notebook(note_store, name='04-10 晨间日记'):
-    notebooks = note_store.listNotebooks()
+    notebooks = retry_on_rate_limit(note_store.listNotebooks)
     for nb in notebooks:
         if nb.name == name:
             return nb
@@ -100,7 +116,7 @@ def read_diaries(note_store, token, nb_guid, start_date, end_date):
     all_notes = []
     offset = 0
     while True:
-        result = note_store.findNotesMetadata(token, note_filter, offset, 100, result_spec)
+        result = retry_on_rate_limit(note_store.findNotesMetadata, token, note_filter, offset, 100, result_spec)
         for note_meta in result.notes:
             if note_meta.created is not None:
                 created_date = datetime.fromtimestamp(note_meta.created / 1000).date()
@@ -117,7 +133,7 @@ def read_diaries(note_store, token, nb_guid, start_date, end_date):
 
     diaries = []
     for note_meta in all_notes:
-        full_note = note_store.getNote(note_meta.guid, True, False, False, False)
+        full_note = retry_on_rate_limit(note_store.getNote, note_meta.guid, True, False, False, False)
         content_text = strip_enml(full_note.content)
         # 尝试获取 OCR 文字
         ocr_text = ''
@@ -224,7 +240,7 @@ def save_to_evernote(note_store, token, notebook_guid, title, md_content):
     note.content = enml_content
     note.notebookGuid = notebook_guid
 
-    created_note = note_store.createNote(token, note)
+    created_note = retry_on_rate_limit(note_store.createNote, token, note)
     print(f"已保存到印象笔记！")
     print(f"  标题: {created_note.title}")
     print(f"  GUID: {created_note.guid}")

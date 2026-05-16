@@ -17,13 +17,15 @@ config_path = os.path.join(os.path.dirname(__file__), 'config.json')
 with open(config_path, 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-# 优先使用 create_diary.py 中的 token（config.json 的可能已过期）
-try:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '01 晨间日记自动创建'))
-    from create_diary import DEFAULT_TOKEN
-    TOKEN = DEFAULT_TOKEN
-except Exception:
-    TOKEN = config['yinxiang']['token']
+# 优先使用 config.json 中的 token
+TOKEN = config['yinxiang']['token']
+if not TOKEN:
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '01 晨间日记自动创建'))
+        from create_diary import DEFAULT_TOKEN
+        TOKEN = DEFAULT_TOKEN
+    except Exception:
+        pass
 
 if not TOKEN:
     print("错误: 未找到有效的印象笔记 token")
