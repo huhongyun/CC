@@ -1,6 +1,6 @@
 # 生成年记
 
-从已有的 12 份月记中综合提炼，生成年度日记并保存到印象笔记。
+从已有的月记中综合提炼，生成年度日记并保存到印象笔记。
 
 ## 参数
 
@@ -12,20 +12,30 @@
 
 如果用户提供了 `$ARGUMENTS`，解析为年份。
 
-如果没有提供，自动取**去年**：`python3.11 -c "from datetime import date; print(date.today().year - 1)"`
-
-### 2. 读取 12 份月记
-
-优先从本地 `output/journal_YYYYMM.md` 读取。如果本地文件不完整，从印象笔记拉取对应月份的晨间日记并先生成缺失的月记。
-
-本地文件检查：
+如果没有提供，通过 resolve 命令自动计算：
 ```bash
-ls "C:/hhy/08 Claude/01 Claude Code/02 笔记融合/output/journal_YYYY"*.md
+python3.11 weekly_journal.py resolve --type year
 ```
+输出去年年份。
+
+如果用户指定了年份：
+```bash
+python3.11 weekly_journal.py resolve --type year --date YYYY
+```
+
+### 2. 读取月记
+
+优先从本地 `output/journal_YYYYMM.md` 读取。用 Python glob 精确过滤该年份的月份文件：
+
+```bash
+python3.11 -c "import glob; files=sorted(glob.glob('output/journal_YYYY*.md')); [print(f) for f in files]"
+```
+
+如果本地文件不完整（少于12份），从印象笔记拉取对应月份的晨间日记并先生成缺失的月记。兼容不完整年份（按现有月记数量生成年记，不完全依赖12份）。
 
 ### 3. 生成年记
 
-读取 12 份月记内容，按以下格式生成年记 Markdown：
+读取月记内容，按以下格式生成年记 Markdown：
 
 ```markdown
 # 年记 | YYYY年
@@ -108,10 +118,10 @@ ls "C:/hhy/08 Claude/01 Claude Code/02 笔记融合/output/journal_YYYY"*.md
 将生成的 Markdown 写入 `output/journal_YYYY.md`，然后运行：
 
 ```bash
-PYTHONIOENCODING=utf-8 python3.11 "C:/hhy/08 Claude/01 Claude Code/02 笔记融合/weekly_journal.py" save --title "YYYY~年记" --file "C:/hhy/08 Claude/01 Claude Code/02 笔记融合/output/journal_YYYY.md"
+PYTHONIOENCODING=utf-8 python3.11 weekly_journal.py save --title "YYYY~年记" --file output/journal_YYYY.md
 ```
 
-标签会根据标题自动添加（含"年记"自动加 `年记` 标签）。
+标签会根据标题自动添加（含 `~年记` 自动加 `年记` 标签）。
 
 ### 5. 输出结果
 

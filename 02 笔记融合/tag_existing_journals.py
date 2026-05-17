@@ -1,9 +1,10 @@
 """为已有的周记/月记/年记批量添加标签
 
 用法:
-    python tag_existing_journals.py [--dry-run]
+    python tag_existing_journals.py [--dry-run] [--notebook NAME]
+    python tag_existing_journals.py --date-start 2025-01-01 --date-end 2025-12-31
 """
-import os, sys, inspect, ssl, argparse, time
+import os, sys, inspect, ssl, argparse, time, re
 
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
@@ -46,32 +47,47 @@ def get_token(config):
             sys.exit(1)
     return token
 
+def classify_title(title):
+    """从标题判断笔记类型，返回标签名称。使用 ~ | - 前缀避免误匹配。"""
+    m = re.search(r'[~-](周记|月记|年记)', title)
+    if m:
+        return m.group(1)
+    return None
+
 def main():
     parser = argparse.ArgumentParser(description='为已有周记/月记/年记添加标签')
     parser.add_argument('--dry-run', action='store_true', help='仅预览，不实际修改')
+    parser.add_argument('--notebook', '-n', default='04-10 晨间日记',
+                        help='笔记本名称（默认: 04-10 晨间日记）')
+    parser.add_argument('--date-start', help='限制处理起始日期（YYYY-MM-DD）')
+    parser.add_argument('--date-end', help='限制处理结束日期（YYYY-MM-DD）')
+    parser.add_argument('--token', help='印象笔记 token（覆盖 config.json）')
     args = parser.parse_args()
 
     config = load_config()
-    token = get_token(config)
+    token = args.token if args.token else get_token(config)
 
     from evernote.api.client import EvernoteClient
     client = EvernoteClient(token=token, sandbox=False, china=True)
     note_store = client.get_note_store()
 
     from evernote.edam.notestore.ttypes import NoteFilter, NotesMetadataResultSpec
+    from datetime import datetime
 
     # 找到笔记本
     notebooks = retry_on_rate_limit(note_store.listNotebooks)
     nb_guid = None
     for nb in notebooks:
-        if nb.name == '04-10 晨间日记':
+        if nb.name == args.notebook:
             nb_guid = nb.guid
             break
     if not nb_guid:
-        print("错误: 未找到笔记本 '04-10 晨间日记'")
+        print(f"错误: 未找到笔记本 '{args.notebook}'")
         sys.exit(1)
 
-    # 搜索所有笔记（不限日期范围，找周记/月记/年记）
+    print(f"笔记本: {args.notebook} ({nb_guid})")
+
+    # 搜索所有笔记
     note_filter = NoteFilter()
     note_filter.notebookGuid = nb_guid
     note_filter.order = 1
@@ -79,6 +95,7 @@ def main():
 
     result_spec = NotesMetadataResultSpec()
     result_spec.includeTitle = True
+    result_spec.includeCreated = True
     result_spec.includeTagGuids = True
 
     all_notes = []
@@ -92,11 +109,29 @@ def main():
 
     print(f"笔记本共 {len(all_notes)} 条笔记")
 
+    # 日期过滤（可选）
+    date_filter_info = ""
+    if args.date_start or args.date_end:
+        start_ts = int(datetime.strptime(args.date_start, '%Y-%m-%d').timestamp() * 1000) if args.date_start else None
+        end_ts = int(datetime.strptime(args.date_end, '%Y-%m-%d').timestamp() * 1000) + 86400000 if args.date_end else None
+        filtered = []
+        for note_meta in all_notes:
+            if note_meta.created is None:
+                continue
+            if start_ts and note_meta.created < start_ts:
+                continue
+            if end_ts and note_meta.created > end_ts:
+                continue
+            filtered.append(note_meta)
+        all_notes = filtered
+        date_filter_info = f"（日期范围: {args.date_start or '不限'} ~ {args.date_end or '不限'}）"
+        print(f"日期过滤后: {len(all_notes)} 条{date_filter_info}")
+
     # 过滤出周记/月记/年记
     target_notes = []
     for note_meta in all_notes:
         title = note_meta.title or ''
-        if '周记' in title or '月记' in title or '年记' in title:
+        if classify_title(title):
             target_notes.append(note_meta)
 
     print(f"找到 {len(target_notes)} 条需要打标签的笔记\n")
@@ -127,22 +162,13 @@ def main():
     for note_meta in target_notes:
         title = note_meta.title
         existing_guids = note_meta.tagGuids or []
-
-        # 确定需要的标签
-        tag_name = None
-        if '年记' in title:
-            tag_name = '年记'
-        elif '月记' in title:
-            tag_name = '月记'
-        elif '周记' in title:
-            tag_name = '周记'
+        tag_name = classify_title(title)
 
         if not tag_name:
             continue
 
         tag_guid = get_or_create_tag(tag_name)
 
-        # 检查是否已有该标签
         if tag_guid in existing_guids:
             print(f"  跳过（已有标签）: {title}")
             skipped += 1
@@ -153,7 +179,6 @@ def main():
             updated += 1
             continue
 
-        # 获取完整笔记并更新标签
         full_note = retry_on_rate_limit(note_store.getNote, note_meta.guid, False, False, False, False)
         full_note.tagGuids = list(set(existing_guids + [tag_guid]))
         retry_on_rate_limit(note_store.updateNote, token, full_note)
@@ -161,6 +186,7 @@ def main():
         updated += 1
 
     print(f"\n完成: {updated} 条更新, {skipped} 条跳过")
+
 
 if __name__ == '__main__':
     main()

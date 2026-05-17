@@ -34,18 +34,21 @@ pip install evernote3 python-oauth2 winocr Pillow
 ├── analyze.py                # 行为分析 + 知识链接脚本
 ├── read_week_diary.py        # 读取印象笔记上周晨间日记（旧脚本，保留兼容）
 ├── save_weekly_to_evernote.py # 将周记保存到印象笔记（旧脚本，保留兼容）
-├── weekly_journal.py         # 周记工具：读取日记 + 保存周记（推荐使用）
+├── weekly_journal.py         # 周记工具：日期解析 + 读取日记 + 保存周记（推荐使用）
+├── save_all_annual.py        # 批量保存年记 + 拉取缺失年份日记数据
 ├── tag_existing_journals.py  # 批量为已有周记/月记/年记添加标签
 ├── .mcp.json                 # MCP 服务器配置（含 flomo token，不入 git）
 ├── 笔记融合需求.txt            # 原始需求文档
 └── output/                   # 输出目录（不入 git）
-    ├── notes_YYYYMMDD.json     # 拉取的原始数据
-    ├── report_YYYYMMDD.md      # 分析报告
-    ├── last_week_diaries.json  # 上周日记原始数据
-    ├── weekly_YYYYMMDD.txt     # 读取的原始日记（read 子命令输出）
-    ├── journal_YYYYMMDD~MMDD.md # 生成的周记
-    ├── journal_YYYYMM.md       # 生成的月记
-    └── journal_YYYY.md         # 生成的年记
+    ├── notes_YYYYMMDD.json       # 拉取的原始数据
+    ├── report_YYYYMMDD.md        # 分析报告
+    ├── weekly_YYYYMMDD.txt       # read 输出（周范围 ≤7天）
+    ├── diary_YYYYMM.txt          # read 输出（月范围 8-32天）
+    ├── diary_YYYYMMDD_YYYYMMDD.txt # read 输出（自定义范围 >32天）
+    ├── diaries_YYYY.json         # save_all_annual 拉取的原始日记
+    ├── journal_YYYYMMDD~MMDD.md   # 生成的周记
+    ├── journal_YYYYMM.md          # 生成的月记
+    └── journal_YYYY.md            # 生成的年记
 ```
 
 ## 使用方式
@@ -77,33 +80,55 @@ python analyze.py --input output/notes_YYYYMMDD.json
 ### 周记生成
 
 用户说"帮我写周记"或"汇总上周日记"时：
-1. 运行 `python3.11 weekly_journal.py read --start YYYY-MM-DD --end YYYY-MM-DD` 读取指定日期范围的晨间日记
-2. Claude 根据日记内容汇总周记，输出到 `output/journal_YYYYMMDD~MMDD.md`
-3. 运行 `python3.11 weekly_journal.py save --title "标题" --file output/journal.md` 保存到印象笔记
+1. 运行 `python3.11 weekly_journal.py resolve --type week` 获取日期范围
+2. 运行 `python3.11 weekly_journal.py read --start YYYY-MM-DD --end YYYY-MM-DD` 读取晨间日记
+3. Claude 根据日记内容汇总周记，输出到 `output/journal_YYYYMMDD~MMDD.md`
+4. 运行 `python3.11 weekly_journal.py save --title "标题" --file output/journal.md` 保存到印象笔记
 
 ```bash
-# 读取日记（默认输出到 output/weekly_YYYYMMDD.txt）
+# 计算日期范围
+python3.11 weekly_journal.py resolve --type week              # 上周
+python3.11 weekly_journal.py resolve --type week --date 2026-04-01  # 指定日期所在周
+
+# 读取日记（输出文件名由脚本自动选择）
 python3.11 weekly_journal.py read --start 2026-04-01 --end 2026-04-07
 
 # 保存周记到印象笔记
 python3.11 weekly_journal.py save --title "20260401~0407-周记" --file output/journal_20260401~0407.md
+
+# 可选参数
+python3.11 weekly_journal.py read --start ... --end ... --notebook "其他笔记本" --no-ocr --token TOKEN
 ```
 
 ### 标签规则
 
-`save` 子命令会根据标题自动添加标签（已内置，无需手动指定）：
+`save` 子命令会根据标题自动添加标签（正则匹配 `[~-](周记|月记|年记)`，避免误匹配）：
 
-| 标题包含 | 自动添加标签 | 示例 |
+| 标题匹配 | 自动添加标签 | 示例 |
 |----------|------------|------|
-| `周记` | `周记` | `20260401~0407-周记` |
-| `月记` | `月记` | `202501~月记` |
-| `年记` | `年记` | `2025~年记` |
+| `-周记` | `周记` | `20260401~0407-周记` |
+| `~月记` | `月记` | `202501~月记` |
+| `~年记` | `年记` | `2025~年记` |
+
+### 批量保存年记
+
+```bash
+python3.11 save_all_annual.py --year 2025          # 保存指定年年记
+python3.11 save_all_annual.py --year 2023 2024     # 多个年份
+python3.11 save_all_annual.py --all                 # 自动检测所有本地年记文件
+python3.11 save_all_annual.py --year 2025 --dry-run # 预览模式
+python3.11 save_all_annual.py --year 2025 --no-fetch # 仅保存，不拉取日记
+```
+
+### 标签管理
 
 如需为已有的笔记批量补标签：
 
 ```bash
-python3.11 tag_existing_journals.py          # 执行
-python3.11 tag_existing_journals.py --dry-run # 预览
+python3.11 tag_existing_journals.py                # 执行
+python3.11 tag_existing_journals.py --dry-run       # 预览
+python3.11 tag_existing_journals.py --notebook "其他笔记本"  # 指定笔记本
+python3.11 tag_existing_journals.py --date-start 2025-01-01 --date-end 2025-12-31  # 限制日期范围
 ```
 
 ### 周记/月记/年记 Skill

@@ -2,6 +2,9 @@
 config.json
 .mcp.json
 
+# Claude Code Skill 文件（覆盖根 .gitignore 的 .claude/ 规则）
+!.claude/
+
 # 输出目录
 output/
 

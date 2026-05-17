@@ -1,11 +1,17 @@
-"""周记工具：读取印象笔记晨间日记 / 保存周记到印象笔记
+"""周记工具：读取印象笔记晨间日记 / 保存周记到印象笔记 / 日期解析
 
 用法:
-    python weekly_journal.py read  --start 2026-04-01 --end 2026-04-07 [--output path]
-    python weekly_journal.py save  --title "20260330~0405-周记" --file output/journal.md
+    python weekly_journal.py resolve --type week               # 上周范围
+    python weekly_journal.py resolve --type week --date 2026-04-01  # 指定周的周一~周日
+    python weekly_journal.py resolve --type month              # 上月范围
+    python weekly_journal.py resolve --type month --date 2026-04  # 指定月起止日
+    python weekly_journal.py resolve --type year               # 去年
+    python weekly_journal.py resolve --type year --date 2025   # 指定年
+    python weekly_journal.py read --start 2026-04-01 --end 2026-04-07 [--output path] [--notebook NAME] [--no-ocr]
+    python weekly_journal.py save --title "20260330~0405-周记" --file output/journal.md [--notebook NAME]
 """
-import os, sys, json, inspect, re, ssl, argparse, html, time
-from datetime import datetime, timedelta
+import os, sys, json, inspect, re, ssl, argparse, html, time, calendar
+from datetime import datetime, timedelta, date
 
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
@@ -97,7 +103,7 @@ def strip_enml(enml_content):
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
-def read_diaries(note_store, token, nb_guid, start_date, end_date):
+def read_diaries(note_store, token, nb_guid, start_date, end_date, skip_ocr=False):
     """读取指定日期范围内的晨间日记"""
     from evernote.edam.notestore.ttypes import NoteFilter, NotesMetadataResultSpec
 
@@ -136,23 +142,24 @@ def read_diaries(note_store, token, nb_guid, start_date, end_date):
         full_note = retry_on_rate_limit(note_store.getNote, note_meta.guid, True, False, False, False)
         content_text = strip_enml(full_note.content)
         # 尝试获取 OCR 文字
-        ocr_text = ''
-        if full_note.resources:
-            for res in full_note.resources:
-                if res.mime and 'image' in res.mime:
-                    try:
-                        import winocr
-                        img_data = res.data.body
-                        from PIL import Image
-                        import io
-                        img = Image.open(io.BytesIO(img_data))
-                        result = winocr.recognize_pil(img, 'zh-CN')
-                        if result and result.text:
-                            ocr_text += result.text + '\n'
-                    except Exception:
-                        pass
-        if ocr_text:
-            content_text += '\n[图片文字]\n' + ocr_text
+        if not skip_ocr:
+            ocr_text = ''
+            if full_note.resources:
+                for res in full_note.resources:
+                    if res.mime and 'image' in res.mime:
+                        try:
+                            import winocr
+                            img_data = res.data.body
+                            from PIL import Image
+                            import io
+                            img = Image.open(io.BytesIO(img_data))
+                            result = winocr.recognize_pil(img, 'zh-CN')
+                            if result and result.text:
+                                ocr_text += result.text + '\n'
+                        except Exception:
+                            pass
+            if ocr_text:
+                content_text += '\n[图片文字]\n' + ocr_text
 
         diaries.append({
             'title': note_meta.title,
@@ -254,15 +261,12 @@ def save_to_evernote(note_store, token, notebook_guid, title, md_content, tags=N
     note.content = enml_content
     note.notebookGuid = notebook_guid
 
-    # 自动检测标签（从标题推断）
+    # 自动检测标签（从标题推断，要求 ~ 或 - 前缀避免误匹配）
     if tags is None:
         tags = []
-        if '周记' in title:
-            tags.append('周记')
-        elif '月记' in title:
-            tags.append('月记')
-        elif '年记' in title:
-            tags.append('年记')
+        m = re.search(r'[~-](周记|月记|年记)', title)
+        if m:
+            tags.append(m.group(1))
 
     # 设置标签
     if tags:
@@ -280,15 +284,72 @@ def save_to_evernote(note_store, token, notebook_guid, title, md_content, tags=N
         print(f"  标签: {', '.join(tags)}")
     return created_note
 
+# ─── resolve 命令：统一日期计算入口 ────────────────────────
+
+def _resolve_week(ref_date_str=None):
+    """计算周一~周日日期范围。不传则返回上周。"""
+    today = date.today()
+    if ref_date_str:
+        ref_date = datetime.strptime(ref_date_str, '%Y-%m-%d').date()
+        monday = ref_date - timedelta(days=ref_date.weekday())
+    else:
+        monday = today - timedelta(days=today.weekday() + 7)
+    sunday = monday + timedelta(days=6)
+    return monday, sunday
+
+def _resolve_month(ref_date_str=None):
+    """计算月份起止日。不传则返回上月。"""
+    if ref_date_str:
+        parts = ref_date_str.split('-')
+        year, month = int(parts[0]), int(parts[1])
+    else:
+        first_of_this = date(date.today().year, date.today().month, 1)
+        last_day = first_of_this - timedelta(days=1)
+        year, month = last_day.year, last_day.month
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, 1), date(year, month, last)
+
+def cmd_resolve(args):
+    """统一日期计算入口，供 Skill 调用"""
+    if args.type == 'week':
+        monday, sunday = _resolve_week(args.date)
+        print(f"{monday} {sunday}")
+    elif args.type == 'month':
+        start, end = _resolve_month(args.date)
+        print(f"{start} {end}")
+    elif args.type == 'year':
+        if args.date:
+            print(args.date)
+        else:
+            print(str(date.today().year - 1))
+
 # ─── CLI ────────────────────────────────────────────────────
+
+def _detect_output_name(start_date, end_date):
+    """根据日期跨度自动选择输出文件名"""
+    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+    span_days = (end_dt - start_dt).days
+    start_compact = start_date.replace('-', '')
+
+    if span_days <= 7:
+        return f'weekly_{start_compact}.txt'
+    elif span_days <= 32:
+        # 按月命名
+        return f'diary_{start_date[:7].replace("-", "")}.txt'
+    else:
+        # 自定义范围
+        end_compact = end_date.replace('-', '')
+        return f'diary_{start_compact}_{end_compact}.txt'
 
 def cmd_read(args):
     config = load_config()
-    token = get_token(config)
+    token = args.token if args.token else get_token(config)
     note_store = get_evernote_connection(token)
-    notebook = find_notebook(note_store)
+    notebook_name = args.notebook or '04-10 晨间日记'
+    notebook = find_notebook(note_store, name=notebook_name)
 
-    diaries = read_diaries(note_store, token, notebook.guid, args.start, args.end)
+    diaries = read_diaries(note_store, token, notebook.guid, args.start, args.end, skip_ocr=args.no_ocr)
 
     # 输出
     output_dir = os.path.join(SCRIPT_DIR, 'output')
@@ -297,8 +358,8 @@ def cmd_read(args):
     if args.output:
         output_path = args.output
     else:
-        start_compact = args.start.replace('-', '')
-        output_path = os.path.join(output_dir, f'weekly_{start_compact}.txt')
+        fname = _detect_output_name(args.start, args.end)
+        output_path = os.path.join(output_dir, fname)
 
     with open(output_path, 'w', encoding='utf-8') as f:
         for d in diaries:
@@ -311,9 +372,10 @@ def cmd_read(args):
 
 def cmd_save(args):
     config = load_config()
-    token = get_token(config)
+    token = args.token if args.token else get_token(config)
     note_store = get_evernote_connection(token)
-    notebook = find_notebook(note_store)
+    notebook_name = args.notebook or '04-10 晨间日记'
+    notebook = find_notebook(note_store, name=notebook_name)
 
     with open(args.file, 'r', encoding='utf-8') as f:
         md_content = f.read()
@@ -324,18 +386,33 @@ def main():
     parser = argparse.ArgumentParser(description='周记工具')
     sub = parser.add_subparsers(dest='command', required=True)
 
+    # resolve 子命令
+    p_resolve = sub.add_parser('resolve', help='计算日期范围（供 Skill 调用）')
+    p_resolve.add_argument('--type', required=True, choices=['week', 'month', 'year'],
+                           help='日期类型')
+    p_resolve.add_argument('--date', help='参考日期（周: YYYY-MM-DD, 月: YYYY-MM, 年: YYYY）')
+
+    # read 子命令
     p_read = sub.add_parser('read', help='读取指定日期范围的晨间日记')
     p_read.add_argument('--start', required=True, help='开始日期 YYYY-MM-DD')
     p_read.add_argument('--end', required=True, help='结束日期 YYYY-MM-DD')
     p_read.add_argument('--output', help='输出文件路径')
+    p_read.add_argument('--notebook', '-n', help='笔记本名称（默认: 04-10 晨间日记）')
+    p_read.add_argument('--no-ocr', action='store_true', help='跳过图片 OCR')
+    p_read.add_argument('--token', help='印象笔记 token（覆盖 config.json）')
 
-    p_save = sub.add_parser('save', help='将 Markdown 周记保存到印象笔记')
+    # save 子命令
+    p_save = sub.add_parser('save', help='将 Markdown 周记/月记/年记保存到印象笔记')
     p_save.add_argument('--title', required=True, help='笔记标题')
     p_save.add_argument('--file', required=True, help='Markdown 文件路径')
+    p_save.add_argument('--notebook', '-n', help='笔记本名称（默认: 04-10 晨间日记）')
+    p_save.add_argument('--token', help='印象笔记 token（覆盖 config.json）')
 
     args = parser.parse_args()
 
-    if args.command == 'read':
+    if args.command == 'resolve':
+        cmd_resolve(args)
+    elif args.command == 'read':
         cmd_read(args)
     elif args.command == 'save':
         cmd_save(args)
